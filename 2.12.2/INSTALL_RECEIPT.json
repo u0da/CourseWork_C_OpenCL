@@ -1,0 +1,45 @@
+{
+  "homebrew_version": "2.5.10-43-g79c14e6",
+  "used_options": [
+
+  ],
+  "unused_options": [
+
+  ],
+  "built_as_bottle": true,
+  "poured_from_bottle": true,
+  "installed_as_dependency": false,
+  "installed_on_request": true,
+  "changed_files": [
+
+  ],
+  "time": 1636196189,
+  "source_modified_time": 1472680011,
+  "stdlib": "libcxx",
+  "compiler": "clang",
+  "aliases": [
+
+  ],
+  "runtime_dependencies": [
+
+  ],
+  "source": {
+    "spec": "stable",
+    "versions": {
+      "stable": "2.12.2",
+      "head": null,
+      "version_scheme": 0
+    },
+    "path": "/usr/local/Homebrew/Library/Taps/homebrew/homebrew-core/Formula/clfft.rb",
+    "tap_git_head": "ff99cddaad3c870dac74d7be6b8da4bdbc2bce18",
+    "tap": "homebrew/core"
+  },
+  "arch": "x86_64",
+  "built_on": {
+    "os": "Macintosh",
+    "os_version": "macOS 11.0.1",
+    "cpu_family": "penryn",
+    "xcode": "12.2",
+    "clt": "12.2.0.0.1.1604076827"
+  }
+}
