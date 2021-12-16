@@ -2,15 +2,14 @@
 
 CC            = gcc
 CXX           = g++-4.4
-CFLAGS        = -m64 -pipe -O2 -Wno-unused-but-set-parameter -Wall
-CXXFLAGS      = -m64 -pipe -O2 -Wno-unused-but-set-parameter -Wall
+CFLAGS        = -m64 -pipe -O2 -Wno-unused-parameter -Wall
+CXXFLAGS      = -m64 -pipe -O2 -Wno-unused-parameter -Wall
 OPENCL        = /opt/AMDAPP
-CLFFT         = /libclFFT.2.12.2.dylib
 INC_OPENCL    = -I$(OPENCL)/include
-INC_CLFFT     = -I$(CLFFT)/src/include
+INC_CLFFT     = -I../../2.12.2/include
 INCPATH       = $(INC_OPENCL) $(INC_CLFFT)
 LIB_FFTW      = -lfftw3
-LIB_CLFFT     = /usr/local/lib/libclFFT.2.12.2.dylib -lclFFT -framework OpenCL
+LIB_CLFFT     = -L/usr/local/lib -lclFFT -framework OpenCL
 LIB_MATH      = -lm
 DEL_FILE      = rm -f
 
