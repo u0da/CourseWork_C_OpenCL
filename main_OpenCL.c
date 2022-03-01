@@ -10,7 +10,8 @@
 #include <stdarg.h>
 
 #define MAX_SOURCE_SIZE (0x100000)
-FILE *log_file;
+FILE *last_run_log_file;
+FILE *list_of_runs_log_file;
 const float zero = 0;
 
 void show_status_string(const char *format, ...)
@@ -24,11 +25,13 @@ void show_status_string(const char *format, ...)
 
     va_end(args);
 
-    printf( "### ");
+    // console
+    printf( "### "); 
     puts(str);
 
-    fputs(str, log_file);
-    fputc('\n', log_file);
+    // log file
+    fputs(str, last_run_log_file); 
+    fputc('\n', last_run_log_file);
 }
 
 
@@ -521,20 +524,17 @@ int main(void) {
     // получение "устройства", котором будет выполнятся вычисление
     err = clGetDeviceIDs(platform, CL_DEVICE_TYPE_GPU | CL_DEVICE_TYPE_CPU, 0, NULL, &number_of_devices);
 
-    log_file = fopen("log_file.txt", "wb");
-
+    
     printf("### Amount of devices: %u\n", number_of_devices);
-    fprintf(log_file, "Amount of devices: %u\n", number_of_devices);
     printf("### List of devices:\n");
 
+    char name[128] = {'\0'};
     cl_device_id *devices = (cl_device_id *) malloc(number_of_devices * sizeof(cl_device_id));
     err = clGetDeviceIDs(platform, CL_DEVICE_TYPE_GPU | CL_DEVICE_TYPE_CPU, number_of_devices, devices, NULL);
     for (int i = 0; i < number_of_devices; i++)
     {
-        char name[128] = {'\0'};
-
         err = clGetDeviceInfo(devices[i], CL_DEVICE_NAME, sizeof(name), name, NULL);
-        show_status_string("\t\t[%d]%s", i, name);
+        printf("\t\t[%d]%s\n", i, name);
     }
     printf("\n");
 
@@ -549,12 +549,10 @@ int main(void) {
     }
     cl_device_id device = devices[ptr];
 
-    fprintf(log_file, "You chose this device: [%d]\n", ptr);
     free(devices);
 
     char version[128] = {'\0'};
     err = clGetDeviceInfo(device, CL_DEVICE_VERSION,  sizeof(version), version, NULL);
-    fprintf(log_file, "Your OpenCL version: %s\n", version);
 
     int major_version = 0;
     int minor_version = 0;
@@ -571,7 +569,7 @@ int main(void) {
     printf("Choose image size (like 512, 1024 etc): ");
     scanf("%d", &ptr);
     printf("\n");
-    fprintf(log_file, "You chose image size: %dx%d\n", ptr, ptr);
+    
     int amount_of_pics = 0;
 
     while (amount_of_pics < 1)
@@ -580,14 +578,30 @@ int main(void) {
         scanf("%d", &amount_of_pics);
         printf("\n");
     }
-    fprintf(log_file, "You chose this amount of pics: %d\n", amount_of_pics);
+
+    clock_t time_start_program = clock();
+
+    char buff[100];
+    time_t now = time(0);
+    strftime (buff, 100, "%Y-%m-%d | %H-%M-%S", localtime(&now));
+
+    char str_name_of_log_file[128];
+    sprintf(str_name_of_log_file, "log_file | %d | %d | %s.txt", ptr, amount_of_pics, buff);
+    last_run_log_file = fopen(str_name_of_log_file, "wb");
+
+    fprintf(last_run_log_file, "Amount of devices: %u\n", number_of_devices);
+    err = clGetDeviceInfo(device, CL_DEVICE_NAME, sizeof(name), name, NULL);
+    fprintf(last_run_log_file, "You chose this device: [%s]\n", name);
+    fprintf(last_run_log_file, "Your OpenCL version: %s\n", version);
+    fprintf(last_run_log_file, "You chose image size: %dx%d\n", ptr, ptr);
+    fprintf(last_run_log_file, "You chose this amount of pics: %d\n", amount_of_pics);
 
     cl_ulong device_memsize_in_bytes = 0;
     err = clGetDeviceInfo(device, CL_DEVICE_GLOBAL_MEM_SIZE, sizeof(device_memsize_in_bytes), &device_memsize_in_bytes, NULL);
 
     show_status_string("GPU mem space: %"PRIu64" MB", device_memsize_in_bytes/((cl_ulong)1024*(cl_ulong)1024));
 
-    cl_ulong min_memsize_in_bytes_required = (cl_ulong)(ptr*ptr) * sizeof(float) * (16 * amount_of_pics + 14);
+    cl_ulong min_memsize_in_bytes_required = (cl_ulong)(ptr*ptr) * sizeof(float) * (32 * amount_of_pics + 22);
     if (min_memsize_in_bytes_required >= device_memsize_in_bytes)
     {
         printf("### Not enough GPU memory\n");
@@ -625,7 +639,7 @@ int main(void) {
         clfftTeardown(); // Release clFFT library
         clReleaseCommandQueue(queue); // Release OpenCL working objects
         clReleaseContext(ctx);
-        fclose(log_file);
+        fclose(last_run_log_file);
         exit(1);
     }
 
@@ -644,7 +658,7 @@ int main(void) {
        clReleaseCommandQueue(queue); // Release OpenCL working objects
        clReleaseProgram(program);
        clReleaseContext(ctx);
-       fclose(log_file);
+       fclose(last_run_log_file);
        exit(1);
     }
 
@@ -784,7 +798,7 @@ int main(void) {
                     for (int l = 0; l < amount_of_h; l++)
                         DeInItCl_Buffer_pair(&h_rash_CL[l]);
                     DeInItCl_Buffer_pair(&all_pics_buffer);
-                    fclose(log_file);
+                    fclose(last_run_log_file);
                     DeInItFFT_OpenCL_data(&fft_orig_size);
                     clReleaseProgram(program);
                     clfftTeardown(); // Release clFFT library
@@ -842,7 +856,9 @@ int main(void) {
 
 /// Умножение картинки и элементов матрицы h_rash
 
-    clock_t calculations_start = clock();
+    clock_t multiply_plus_add_time = 0;
+
+    clock_t time0 = clock();
 
     cl_kernel multiply_kernel = clCreateKernel(program, "multiply_kernel", &ret);
     cl_kernel add_normalized_abs_part_kernel = clCreateKernel(program, "add_normalized_abs_part_kernel", &ret);
@@ -887,7 +903,9 @@ int main(void) {
     ret = clSetKernelArg(add_normalized_abs_part_kernel, 3, sizeof(cl_mem), &result_CL);
     if(ret != CL_SUCCESS)
         printf("Problems w/ setting KernelArgs for result[1] abs\n");
-
+    
+    clock_t time0_e = clock();
+    multiply_plus_add_time += time0_e - time0;
 
     float *result;
     struct Image image_result;
@@ -905,6 +923,9 @@ int main(void) {
     float time_multiply_full = 0;
     for (int m = 0; m < amount_of_pics; m++)
     {
+
+        clock_t time1 = clock();
+
         err = clEnqueueFillBuffer(queue, result_CL, &zero, sizeof(zero), 0, N * sizeof(float), 0, NULL, NULL);
         if (err != CL_SUCCESS)
         {
@@ -915,8 +936,12 @@ int main(void) {
         if (ret != CL_SUCCESS)
             printf("Problems w/ clFinish after copy");
 
+        clock_t time1_e = clock();
+        multiply_plus_add_time += time1_e - time1;
+
         for (int n = 0; n < amount_of_pics; n++)
         {
+            clock_t time2 = clock();
             cl_ulong offset = N * n;
             ret = clSetKernelArg(multiply_kernel, 2, sizeof(offset), &offset);
             if(ret != CL_SUCCESS)
@@ -929,7 +954,8 @@ int main(void) {
             ret = clSetKernelArg(multiply_kernel, 4, sizeof(cl_mem), &h_rash_CL[h_rash_CL_index].buffers[1]);
             if(ret != CL_SUCCESS)
                 printf("Problems w/ setting KernelArgs for h_rash_CL[1] multiply\n");
-
+            clock_t time2_e = clock();
+            multiply_plus_add_time += time2_e - time2;
 
             clock_t  multiply_start_time = clock();
 
@@ -942,13 +968,16 @@ int main(void) {
                 printf("Problems w/ clFinish");
 
             clock_t  multiply_end_time = clock();
+            multiply_plus_add_time += multiply_end_time - multiply_start_time;
 
             show_status_string("Time for multiplying 1 layer: %f", (float)(multiply_end_time-multiply_start_time)/CLOCKS_PER_SEC);
             time_multiply_full += (float)(multiply_end_time-multiply_start_time)/CLOCKS_PER_SEC;
+            
+            multiply_plus_add_time += multiply_end_time-multiply_start_time;
             printf("### index_result:%d index_input:%d\n", m, n);
 
 
-
+            clock_t time3 = clock();
             /// Обратное ПФ для результата
             if (FFT_2D_OpenCL(&result_part_CL, CLFFT_BACKWARD, queue, CL_TRUE, &fft_rash_size) == 0)
                 ;
@@ -956,17 +985,21 @@ int main(void) {
             else
                 printf("IFFT for result NOT passed !\n");
 
+
             ret = clEnqueueNDRangeKernel(queue, add_normalized_abs_part_kernel, 1, NULL, &N, NULL, 0, NULL, NULL);
             if (ret != CL_SUCCESS)
                 printf("Problems w/ clEnqueueNDRangeKernel abs");
             ret = clFinish(queue);
             if (ret != CL_SUCCESS)
                 printf("Problems w/ clFinish");
+            
+            clock_t time3_e = clock();
+
+            multiply_plus_add_time += time3_e - time3;
         }
 
         show_status_string("Time for multiplying all layers: %f", time_multiply_full);
 
-        clock_t start_writing_result = clock();
         ret = clEnqueueReadBuffer(queue, result_CL, CL_TRUE, 0,
                                   N * sizeof(float), result, 0, NULL, NULL);
         if (ret != CL_SUCCESS)
@@ -986,8 +1019,6 @@ int main(void) {
         show_status_string("Writing data to file");
 
         write_png_file(image_result, filename_png);
-        clock_t end_writing_result = clock();
-        calculations_start += end_writing_result - start_writing_result;
     }
 
     clReleaseKernel(multiply_kernel);
@@ -996,7 +1027,10 @@ int main(void) {
     DeInItCl_Buffer_pair(&result_part_CL);
 
     show_status_string("");
-    show_status_string("Full time of calculations(multiply+add): %g seconds\n", (float)(clock() - calculations_start )/CLOCKS_PER_SEC);
+    float tmp_time_of_calc = (float)(multiply_plus_add_time )/CLOCKS_PER_SEC;
+    show_status_string("Full time of calculations(multiply+add): %g seconds\n", tmp_time_of_calc);
+    
+    
     printf("### Cleaning...\n");
 
     for (int i = 0; i < image_result.height; i++)
@@ -1012,12 +1046,26 @@ int main(void) {
         DeInItCl_Buffer_pair(&h_rash_CL[i]);
     }
 
-    fclose(log_file);
+    // fputc('\n', list_of_runs_log_file);
+    fclose(last_run_log_file);
     DeInItFFT_OpenCL_data(&fft_rash_size);
     clReleaseProgram(program);
     clfftTeardown(); // Release clFFT library
     clReleaseCommandQueue(queue); // Release OpenCL working objects
     clReleaseContext(ctx);
 
+
+    clock_t time_end_program = clock();
+    
+    strftime (buff, 100, "%d-%m-%Y %H:%M:%S", localtime(&now));
+    list_of_runs_log_file = fopen("list_of_runs_log_file.txt", "a");
+    err = clGetDeviceInfo(device, CL_DEVICE_NAME, sizeof(name), name, NULL);
+    
+    if (ftell(list_of_runs_log_file) == 0)
+        fprintf(list_of_runs_log_file, "|%-20s |%-19s |%-22s |%-15s |%-15s |%-15s\n\n", "Date", "time(multiply+add)", "full time of program" ,"Size", "Amount of pics", "Device");
+ 
+    fprintf(list_of_runs_log_file, "|%-20s |%-19f |%-22f |%-15d |%-15d |%-15s\n" , buff, tmp_time_of_calc, (float)(time_end_program-time_start_program)/CLOCKS_PER_SEC, half_sizex, amount_of_pics, name);
+
+    fclose(list_of_runs_log_file);
     return 0;
 }
